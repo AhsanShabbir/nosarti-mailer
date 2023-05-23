@@ -1,19 +1,21 @@
 <?php
 namespace App\Traits;
 trait Validations{
-
     private function validate()
     {
+        //inlcude the validation file from session
+        include_once __DIR__ .'/../../locale/' . $_SESSION['locale'] . '.php';
+
         //check if subject, from, to, body are not empty
         if (empty($this->subject) || empty($this->fromAddress) || empty($this->fromName) || empty($this->to) || empty($this->body) || empty($this->altBody)) {
-            throw new \Exception('Subject, From, To, Body, AltBody are required');
+            throw new \Exception($lang['empty_fields']);
         }
 
         if (!$this->validateEmails()) {
-            throw new \Exception('Validation failed. Please check the email addresses');
+            throw new \Exception($lang['invalid_email']);
         }
     }
-    
+
     /**
      * Validate Emails
      *

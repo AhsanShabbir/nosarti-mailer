@@ -25,14 +25,19 @@ class NosratiMailer
     private $attachments = [];
     private $driver;
     private $checkValidation;
+    private $strings;
 
 
     public function __construct($driver = 'phpmailer', $validate = true)
     {
+        include_once __DIR__ .'/../locale/' . $_SESSION['locale'] . '.php';
+        $this->strings = $lang;
+
         $this->driver = $driver;
         $this->fromAddress = getenv('MAIL_FROM_ADDRESS');
         $this->fromName = getenv('MAIL_FROM_NAME');
         $this->checkValidation = $validate;
+        
     }
 
 
@@ -123,6 +128,12 @@ class NosratiMailer
     }
 
 
+    public function useValidation(bool $validate)
+    {
+        $this->checkValidation = $validate;
+        return $this;
+    }
+
 
     /**
      * Attachment Files
@@ -137,7 +148,7 @@ class NosratiMailer
         $ext = pathinfo($file, PATHINFO_EXTENSION);
 
         if (!in_array($ext, $allowed)) {
-            throw new \Exception('Only pdf, docx, doc, xls, csv, png files are allowed');
+            throw new \Exception($this->strings['invalid_file_type']);
         }
         $this->attachments[] = $file;
         return $this;
@@ -214,7 +225,7 @@ class NosratiMailer
             return $this->error($mail->ErrorInfo);
         }
 
-        return $this->success('Email sent successfully');
+        return $this->success($this->strings['email_sent_successfully']);
     }
 
     /**
@@ -242,7 +253,7 @@ class NosratiMailer
 
         $mg->messages()->send($domain, $data);
 
-        return $this->success('Email sent successfully with MailGun');
+        return $this->success($this->strings['email_sent_successfully']);
     }
 
 
@@ -267,7 +278,7 @@ class NosratiMailer
         foreach ($this->bcc ?? [] as $email) {
             $mail->addBcc(...$email);
         }
-        
+
         $mail->addContent($this->isHTML ? "text/html" : "text/plain", $this->body);
         $mail->addContent("text/plain", $this->altBody);
 
@@ -287,9 +298,9 @@ class NosratiMailer
             $response = $sendgrid->send($mail);
 
             if ($response->statusCode() == 202) {
-                return $this->success('Email sent successfully with SendGrid');
+                return $this->success($this->strings['email_sent_successfully']);
             } else {
-                return $this->error('Error while sending email using SendGrid: ' . $response->body());
+                return $this->error($this->strings['failed_to_send'].': ' . $response->body());
             }
         } catch (\Throwable $th) {
             return $this->error($th->getMessage());
