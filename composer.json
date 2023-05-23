@@ -1,0 +1,9 @@
+{
+    "require": {
+        "phpmailer/phpmailer": "^6.8",
+        "sendgrid/sendgrid": "^8.0",
+        "mailgun/mailgun-php": "*",
+        "symfony/http-client": "*",
+        "nyholm/psr7": "*"
+    }
+}
