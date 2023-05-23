@@ -2,12 +2,15 @@
 
 namespace App;
 
+use App\Traits\HasResponses;
+use Mailgun\Mailgun;
 use PHPMailer\PHPMailer\PHPMailer;
 use SendGrid;
 
 class NosratiMailer
 {
 
+    use HasResponses;
     private $fromName;
     private $fromAddress;
     private $to  = [];
@@ -100,13 +103,17 @@ class NosratiMailer
             //validate data
             $this->validate();
             if ($this->driver == 'phpmailer') {
-                $this->sendWithPHPMailer();
+                return $this->sendWithPHPMailer();
             }
             if($this->driver == 'sendgrid'){
-                $this->sendWithSendGrid();
+               return $this->sendWithSendGrid();
             }
+            if($this->driver == 'mailgun'){
+               return $this->sendWithMailGun();
+            }
+
         } catch (\Throwable $th) {
-            echo $th;
+            return $this->error($th->getMessage());
         }
     }
 
@@ -118,6 +125,7 @@ class NosratiMailer
         }
     }
 
+    /**Send Email with PHP Mailer */
     private function sendWithPHPMailer()
     {
         $mail = new PHPMailer();
@@ -131,10 +139,11 @@ class NosratiMailer
 
         $mail->setFrom($this->fromAddress, $this->fromName);
 
-        foreach ($this->to as $email => $name) {
-            $mail->addAddress($email, "Ahsan");
+        foreach ($this->to as $recipient) {
+            $mail->addAddress($recipient[0], $recipient[1]);
         }
 
+        
         foreach ($this->cc as $email) {
 
             $address =  $email[0];
@@ -149,7 +158,6 @@ class NosratiMailer
         }
 
         foreach ($this->attachments as $attachment) {
-            var_dump($attachment);
             $mail->addAttachment($attachment);
         }
 
@@ -160,30 +168,99 @@ class NosratiMailer
             $mail->isHTML(true);
         }
 
-
         if (!$mail->send()) {
-            echo 'Error while sending email using PHPMailer: ' . $mail->ErrorInfo;
-            return false;
+            return $this->error($mail->ErrorInfo);
         }
-        echo 'Mail sent successfully using PHPMailer';
-        return true;
+        return $this->success('Email sent successfully');
     }
 
+    /**
+     * Send with MailGun
+     *
+     * @return void
+     */
+    private function sendWithMailGun(){
+
+        //send email 
+        $mg = Mailgun::create(getenv('MAILGUN_KEY'));
+        $domain = getenv('MAILGUN_DOMAIN');
+
+
+        $data = [
+            'from'    => $this->mgFormatSingle($this->fromName, $this->fromAddress),
+            'to'      => $this->mgFormat($this->to),
+            'subject' => $this->subject,
+            'text'    => $this->altBody,
+            'html'    => $this->isHTML ? $this->body : null,
+            'attachment' => $this->attachments ? $this->mgPrepareAttachments($this->attachments) : null
+        ];
+        
+        $mg->messages()->send($domain, $data );
+
+        return $this->success('Email sent successfully with MailGun');
+
+    }
+
+    /**
+     * Undocumented function
+     *
+     * @param array $email
+     * @return void
+     */
+    private function mgformat(array $email){
+        $formatted = [];
+        foreach($email as $address => $name){
+          $formatted[] = $this->mgFormatSingle($name, $address);
+        }
+
+        return implode(',', $formatted);
+    }
+
+    /**
+     * Undocumented function
+     *
+     * @param [type] $name
+     * @param [type] $address
+     * @return void
+     */
+    private function mgFormatSingle($name, $address){
+        return $name . ' <' . $address . '>';
+    }
+
+    
+    private function mgPrepareAttachments($attachments)
+    {
+        $files = [];
+
+        foreach ($attachments as $attachment) {
+            $files[] = [
+                'filePath' => $attachment
+            ];
+        }
+
+        return $files;
+    }
+    /**
+     * Send Email with SendGrid
+     *
+     * @return void
+     */
     private function sendWithSendGrid()
     {
         $mail = new \SendGrid\Mail\Mail();
         $mail->setFrom($this->fromAddress, $this->fromName);
+        
         $mail->setSubject($this->subject);
         
-        foreach ($this->to as $email => $name) {
-            $mail->addTo($email, $name);
-        }
-        
-        
-        foreach ($this->cc as $email) {
-
+        foreach ($this->to as $email) {
             $address =  $email[0];
-            $name = $email[1]; 
+            $name = $email[1];
+            $mail->addTo($address, $name);
+        }
+    
+        foreach ($this->cc as $email) {
+            $address =  $email[0];
+            $name = $email[1];
             $mail->addCc($address, $name);
         }
         
@@ -193,9 +270,9 @@ class NosratiMailer
             $mail->addBcc($address, $name);
         }
         
+        $mail->addContent($this->isHTML ? "text/html" : "text/plain", $this->body);
         $mail->addContent("text/plain", $this->altBody);
-        $mail->addContent("text/html", $this->body);
-        
+
         //add attachment with dynamic name and content type
         foreach ($this->attachments as $attachment) {
             $file_encoded = base64_encode(file_get_contents($attachment));
@@ -212,15 +289,12 @@ class NosratiMailer
             $response = $sendgrid->send($mail);
             
             if ($response->statusCode() == 202) {
-                echo 'Mail sent successfully using SendGrid';
-                return true;
+                return $this->success('Email sent successfully with SendGrid');
             } else {
-                echo 'Error while sending email using SendGrid: ' . $response->body();
-                return false;
+                return $this->error('Error while sending email using SendGrid: ' . $response->body());
             }
         } catch (\Throwable $th) {
-            echo 'Error while sending email using SendGrid: ' . $th->getMessage();
-            return false;
+            return $this->error($th->getMessage());
         }
     }
 }
